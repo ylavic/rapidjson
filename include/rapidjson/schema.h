@@ -1523,7 +1523,8 @@ public:
         \param allocator An optional allocator instance for allocating memory. Can be null.
     */
     explicit GenericSchemaDocument(const ValueType& document, const Ch* uri = 0, SizeType uriLength = 0,
-        IRemoteSchemaDocumentProviderType* remoteProvider = 0, Allocator* allocator = 0) :
+        IRemoteSchemaDocumentProviderType* remoteProvider = 0, Allocator* allocator = 0,
+        const PointerType& pointer = PointerType()) :
         remoteProvider_(remoteProvider),
         allocator_(allocator),
         ownAllocator_(),
@@ -1543,7 +1544,7 @@ public:
 
         // Generate root schema, it will call CreateSchema() to create sub-schemas,
         // And call AddRefSchema() if there are $ref.
-        CreateSchemaRecursive(&root_, PointerType(), document, document);
+        CreateSchemaRecursive(&root_, pointer, document, document);
 
         // Resolve $ref
         while (!schemaRef_.Empty()) {
