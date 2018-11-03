@@ -1654,9 +1654,9 @@ private:
     void CreateSchema(const SchemaType** schema, const PointerType& pointer, const ValueType& v, const ValueType& document) {
         RAPIDJSON_ASSERT(pointer.IsValid());
         if (v.IsObject()) {
-            if (const SchemaType* s = GetSchema(pointer)) {
+            if (const SchemaType* sc = GetSchema(pointer)) {
                 if (schema)
-                    *schema = s;
+                    *schema = sc;
             }
             else if (!HandleRefSchema(pointer, schema, v, document)) {
                 SchemaType* s = new (allocator_->Malloc(sizeof(SchemaType))) SchemaType(this, pointer, v, document, allocator_);
@@ -1707,10 +1707,10 @@ private:
                                 return true;
 
                             if (!parseWholeDocument_) {
-                                SchemaType* s = new (allocator_->Malloc(sizeof(SchemaType))) SchemaType(this, pointer, *nv, document, allocator_);
-                                new (schemaMap_.template Push<SchemaEntry>()) SchemaEntry(pointer, s, true, allocator_);
+                                SchemaType* sc = new (allocator_->Malloc(sizeof(SchemaType))) SchemaType(this, pointer, *nv, document, allocator_);
+                                new (schemaMap_.template Push<SchemaEntry>()) SchemaEntry(pointer, sc, true, allocator_);
                                 if (schema)
-                                    *schema = s;
+                                    *schema = sc;
                                 return true;
                             }
                         }
