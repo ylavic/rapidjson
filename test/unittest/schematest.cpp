@@ -1659,17 +1659,24 @@ TEST(SchemaValidator, SchemaPointer) {
         "        },"
         "        \"d\": {"
         "          \"$ref\": \"#/definitions/Prop_d\""
+        "        },"
+        "        \"s\": {"
+        "          \"type\": \"string\""
         "        }"
         "      },"
+        "      \"required\": [\"c\"],"
         "      \"type\": \"object\""
         "    },"
         "    \"Prop_d\": {"
-        "      \"enum\": ["
-        "        \"D1\","
-        "        \"D2\","
-        "        \"D3\""
-        "      ],"
-        "      \"type\": \"string\""
+        "      \"properties\": {"
+        "        \"a\": {"
+        "          \"$ref\": \"#/definitions/Prop_a\""
+        "        },"
+        "        \"c\": {"
+        "          \"$ref\": \"#/definitions/Prop_a/properties/c\""
+        "        }"
+        "      },"
+        "      \"type\": \"object\""
         "    },"
         "    \"Resp_200\": {"
         "      \"properties\": {"
@@ -1687,32 +1694,91 @@ TEST(SchemaValidator, SchemaPointer) {
 
     SchemaDocument s1(sd, NULL, 0, NULL, NULL,
                       Pointer("#/paths/~1some~1path/post/parameters/0/schema"));
-    VALIDATE(s1, "{ \"a\": { \"c\": \"C2\", \"d\": \"D1\" }, \"b\": 123 }", true);
-    INVALIDATE(s1, "{ \"a\": { \"c\": \"C2\" }, \"b\": \"should be an int\" }",
+    VALIDATE(s1,
+        "{"
+        "  \"a\": {"
+        "    \"c\": \"C1\","
+        "    \"d\": {"
+        "      \"a\": {"
+        "        \"c\": \"C2\""
+        "      },"
+        "      \"c\": \"C3\""
+        "    }"
+        "  },"
+        "  \"b\": 123"
+        "}",
+        true);
+    INVALIDATE(s1,
+        "{"
+        "  \"a\": {"
+        "    \"c\": \"C1\","
+        "    \"d\": {"
+        "      \"a\": {"
+        "        \"c\": \"C2\""
+        "      },"
+        "      \"c\": \"C3\""
+        "    }"
+        "  },"
+        "  \"b\": \"should be an int\""
+        "}",
         "#/paths/~1some~1path/post/parameters/0/schema/properties/b", "type", "#/b",
         "{ \"type\": {"
         "    \"instanceRef\":\"#/b\","
         "    \"schemaRef\":\"#/paths/~1some~1path/post/parameters/0/schema/properties/b\","
         "    \"expected\": [\"integer\"], \"actual\":\"string\""
         "}}");
-    INVALIDATE(s1, "{ \"a\": { \"c\": \"should be within enum\", \"d\": \"D1\" }, \"b\": 123 }",
-        "#/definitions/Prop_a/properties/c", "enum", "#/a/c",
+    INVALIDATE(s1,
+        "{"
+        "  \"a\": {"
+        "    \"c\": \"C1\","
+        "    \"d\": {"
+        "      \"a\": {"
+        "        \"c\": \"should be within enum\""
+        "      },"
+        "      \"c\": \"C3\""
+        "    }"
+        "  },"
+        "  \"b\": 123"
+        "}",
+        "#/definitions/Prop_a/properties/c", "enum", "#/a/d/a/c",
         "{ \"enum\": {"
-        "    \"instanceRef\":\"#/a/c\","
+        "    \"instanceRef\":\"#/a/d/a/c\","
         "    \"schemaRef\":\"#/definitions/Prop_a/properties/c\""
+        "}}");
+    INVALIDATE(s1,
+        "{"
+        "  \"a\": {"
+        "    \"c\": \"C1\","
+        "    \"d\": {"
+        "      \"a\": {"
+        "        \"s\": \"required 'c' is missing\""
+        "      }"
+        "    }"
+        "  },"
+        "  \"b\": 123"
+        "}",
+        "#/definitions/Prop_a", "required", "#/a/d/a",
+        "{ \"required\": {"
+        "    \"missing\":[\"c\"],"
+        "    \"instanceRef\":\"#/a/d/a\","
+        "    \"schemaRef\":\"#/definitions/Prop_a\""
         "}}");
 
     SchemaDocument s2(sd, NULL, 0, NULL, NULL,
                       Pointer("#/paths/~1some~1path/post/responses/200/schema"));
-    VALIDATE(s2, "{ \"e\": \"some string\", \"f\": false }", true);
-    INVALIDATE(s2, "{ \"e\": true, \"f\": false }",
+    VALIDATE(s2,
+        "{ \"e\": \"some string\", \"f\": false }",
+        true);
+    INVALIDATE(s2,
+        "{ \"e\": true, \"f\": false }",
         "#/definitions/Resp_200/properties/e", "type", "#/e",
         "{ \"type\": {"
         "    \"instanceRef\":\"#/e\","
         "    \"schemaRef\":\"#/definitions/Resp_200/properties/e\","
         "    \"expected\": [\"string\"], \"actual\":\"boolean\""
         "}}");
-    INVALIDATE(s2, "{ \"e\": \"some string\", \"f\": 123 }",
+    INVALIDATE(s2,
+        "{ \"e\": \"some string\", \"f\": 123 }",
         "#/definitions/Resp_200/properties/f", "type", "#/f",
         "{ \"type\": {"
         "    \"instanceRef\":\"#/f\","
