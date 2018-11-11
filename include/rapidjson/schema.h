@@ -1693,7 +1693,7 @@ private:
                 }
                 else { // Local reference
                     const PointerType pointer(s, len, allocator_);
-                    if (pointer.IsValid()) {
+                    if (pointer.IsValid() && !IsCyclicRef(pointer)) {
                         if (const ValueType* nv = pointer.Get(document)) {
                             CreateSchema(schema, pointer, *nv, document);
                             return true;
@@ -1716,6 +1716,13 @@ private:
             SchemaEntry *entry = schemaMap_.template Push<SchemaEntry>();
             new (entry) SchemaEntry(**ref, schema, false, allocator_);
         }
+    }
+
+    bool IsCyclicRef(const PointerType& pointer) const {
+        for (const SchemaRefPtr* ref = schemaRef_.template Bottom<SchemaRefPtr>(); ref != schemaRef_.template End<SchemaRefPtr>(); ++ref)
+            if (pointer == **ref)
+                return true;
+        return false;
     }
 
     const SchemaType* GetSchema(const PointerType& pointer) const {
