@@ -495,7 +495,7 @@ public:
         AssignIfExist(oneOf_, *schemaDocument, p, value, GetOneOfString(), document);
 
         if (const ValueType* v = GetMember(value, GetNotString())) {
-            schemaDocument->CreateSchema(&not_, p.Append(GetNotString(), allocator_), *v, document);
+            valid_ &= schemaDocument->CreateSchema(&not_, p.Append(GetNotString(), allocator_), *v, document);
             notValidatorIndex_ = validatorCount_;
             validatorCount_++;
         }
@@ -572,16 +572,14 @@ public:
             for (ConstMemberIterator itr = properties->MemberBegin(); itr != properties->MemberEnd(); ++itr) {
                 SizeType index;
                 if (FindPropertyIndex(itr->name, &index))
-                    schemaDocument->CreateSchema(&properties_[index].schema, q.Append(itr->name, allocator_), itr->value, document);
+                    valid_ &= schemaDocument->CreateSchema(&properties_[index].schema, q.Append(itr->name, allocator_), itr->value, document);
                 else
                     valid_ = false;
             }
         }
 
         if (const ValueType* v = GetMember(value, GetPatternPropertiesString())) {
-            if (!v->IsObject())
-                valid_ = false;
-            else {
+            if (v->IsObject()) {
                 PointerType q = p.Append(GetPatternPropertiesString(), allocator_);
                 patternProperties_ = static_cast<PatternProperty*>(allocator_->Malloc(sizeof(PatternProperty) * v->MemberCount()));
                 patternPropertyCount_ = 0;
@@ -590,11 +588,13 @@ public:
                     new (&patternProperties_[patternPropertyCount_]) PatternProperty();
                     patternProperties_[patternPropertyCount_].pattern = CreatePattern(itr->name);
                     if (patternProperties_[patternPropertyCount_].pattern) {
-                        schemaDocument->CreateSchema(&patternProperties_[patternPropertyCount_].schema, q.Append(itr->name, allocator_), itr->value, document);
+                        valid_ &= schemaDocument->CreateSchema(&patternProperties_[patternPropertyCount_].schema, q.Append(itr->name, allocator_), itr->value, document);
                         patternPropertyCount_++;
                     }
                 }
             }
+            else
+                valid_ = false;
         }
 
         if (required) {
@@ -629,7 +629,7 @@ public:
                     }
                     else {
                         hasSchemaDependencies_ = true;
-                        schemaDocument->CreateSchema(&properties_[sourceIndex].dependenciesSchema, q.Append(itr->name, allocator_), itr->value, document);
+                        valid_ &= schemaDocument->CreateSchema(&properties_[sourceIndex].dependenciesSchema, q.Append(itr->name, allocator_), itr->value, document);
                         properties_[sourceIndex].dependenciesValidatorIndex = validatorCount_;
                         validatorCount_++;
                     }
@@ -643,7 +643,7 @@ public:
             if (v->IsBool())
                 additionalProperties_ = v->GetBool();
             else
-                schemaDocument->CreateSchema(&additionalPropertiesSchema_, p.Append(GetAdditionalPropertiesString(), allocator_), *v, document);
+                valid_ &= schemaDocument->CreateSchema(&additionalPropertiesSchema_, p.Append(GetAdditionalPropertiesString(), allocator_), *v, document);
         }
 
         AssignIfExist(minProperties_, value, GetMinPropertiesString());
@@ -656,10 +656,10 @@ public:
                 itemsTuple_ = static_cast<const Schema**>(allocator_->Malloc(sizeof(const Schema*) * v->Size()));
                 SizeType index = 0;
                 for (ConstValueIterator itr = v->Begin(); itr != v->End(); ++itr, index++)
-                    schemaDocument->CreateSchema(&itemsTuple_[itemsTupleCount_++], q.Append(index, allocator_), *itr, document);
+                    valid_ &= schemaDocument->CreateSchema(&itemsTuple_[itemsTupleCount_++], q.Append(index, allocator_), *itr, document);
             }
             else
-                schemaDocument->CreateSchema(&itemsList_, q, *v, document);
+                valid_ &= schemaDocument->CreateSchema(&itemsList_, q, *v, document);
         }
 
         AssignIfExist(minItems_, value, GetMinItemsString());
@@ -669,7 +669,7 @@ public:
             if (v->IsBool())
                 additionalItems_ = v->GetBool();
             else if (v->IsObject())
-                schemaDocument->CreateSchema(&additionalItemsSchema_, p.Append(GetAdditionalItemsString(), allocator_), *v, document);
+                valid_ &= schemaDocument->CreateSchema(&additionalItemsSchema_, p.Append(GetAdditionalItemsString(), allocator_), *v, document);
             else
                 valid_ = false;
         }
@@ -1205,7 +1205,7 @@ private:
                 out.schemas = static_cast<const Schema**>(allocator_->Malloc(out.count * sizeof(const Schema*)));
                 memset(out.schemas, 0, sizeof(Schema*)* out.count);
                 for (SizeType i = 0; i < out.count; i++)
-                    schemaDocument.CreateSchema(&out.schemas[i], q.Append(i, allocator_), (*v)[i], document);
+                    valid_ &= schemaDocument.CreateSchema(&out.schemas[i], q.Append(i, allocator_), (*v)[i], document);
                 out.begin = validatorCount_;
                 validatorCount_ += out.count;
             }
@@ -1727,21 +1727,22 @@ private:
         }
     }
 
-    void CreateSchema(const SchemaType** schema, const PointerType& pointer, const ValueType& v, const ValueType& document) {
+    bool CreateSchema(const SchemaType** schema, const PointerType& pointer, const ValueType& v, const ValueType& document) {
+        bool valid = false;
         RAPIDJSON_ASSERT(pointer.IsValid());
         if (v.IsObject()) {
             if (const SchemaType* sc = GetSchema(pointer)) {
                 if (schema)
                     *schema = sc;
                 AddSchemaRefs(const_cast<SchemaType*>(sc));
+                valid = sc->IsValid();
             }
-            else if (!HandleRefSchema(pointer, schema, v, document)) {
+            else if (!HandleRefSchema(pointer, schema, v, document, valid)) {
                 // The new schema adds itself and its $ref(s) to schemaMap_
                 SchemaType* s = new (allocator_->Malloc(sizeof(SchemaType))) SchemaType(this, pointer, v, document, allocator_);
                 if (schema)
                     *schema = s;
-                if (!s->IsValid())
-                    valid_ = false;
+                valid = s->IsValid();
             }
         }
         else {
@@ -1750,9 +1751,11 @@ private:
             AddSchemaRefs(typeless_);
             valid_ = false;
         }
+        valid_ &= valid;
+        return valid;
     }
 
-    bool HandleRefSchema(const PointerType& source, const SchemaType** schema, const ValueType& v, const ValueType& document) {
+    bool HandleRefSchema(const PointerType& source, const SchemaType** schema, const ValueType& v, const ValueType& document, bool &valid) {
         static const Ch kRefString[] = { '$', 'r', 'e', 'f', '\0' };
         static const ValueType kRefValue(kRefString, 4);
 
@@ -1780,6 +1783,7 @@ private:
                                     if (schema)
                                         *schema = sc;
                                     AddSchemaRefs(const_cast<SchemaType*>(sc));
+                                    valid = sc->IsValid();
                                     return true;
                                 }
                             }
@@ -1790,7 +1794,7 @@ private:
                     const PointerType pointer(s, len, allocator_);
                     if (pointer.IsValid() && !IsCyclicRef(pointer)) {
                         if (const ValueType* nv = pointer.Get(document)) {
-                            CreateSchema(schema, pointer, *nv, document);
+                            valid = CreateSchema(schema, pointer, *nv, document);
                             return true;
                         }
                     }
