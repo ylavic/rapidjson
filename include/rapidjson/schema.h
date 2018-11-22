@@ -1749,7 +1749,6 @@ private:
             if (schema)
                 *schema = typeless_;
             AddSchemaRefs(typeless_);
-            valid_ = false;
         }
         valid_ &= valid;
         return valid;
