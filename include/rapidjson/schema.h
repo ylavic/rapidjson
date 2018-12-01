@@ -1234,7 +1234,7 @@ private:
     template <typename ValueType>
     RegexType* CreatePattern(const ValueType& value) {
         if (value.IsString()) {
-            RegexType *r = new (allocator_->Malloc(sizeof(RegexType)));
+            RegexType *r = static_cast<RegexType*>(allocator_->Malloc(sizeof(RegexType)));
             try {
                 new (r) RegexType(value.GetString(), value.GetStringLength(), std::regex_constants::ECMAScript);
                 return r;
